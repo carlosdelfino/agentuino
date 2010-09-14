@@ -26,25 +26,46 @@
 #define SNMP_MAX_OID_LEN	64 // 128
 #define SNMP_MAX_NAME_LEN	20
 #define SNMP_MAX_VALUE_LEN      64  // 128 ??? should limit this
-#define SNMP_MAX_PACKET_LEN     SNMP_MAX_VALUE_LEN + SNMP_MAX_OID_LEN  //???
+#define SNMP_MAX_PACKET_LEN     SNMP_MAX_VALUE_LEN + SNMP_MAX_OID_LEN + 25  //???
 #define SNMP_FREE(s)   do { if (s) { free((void *)s); s=NULL; } } while(0)
 //Frees a pointer only if it is !NULL and sets its value to NULL. 
 
 #include "WProgram.h"
-#include "ASocket.h"
+#include "Udp.h"
 
 extern "C" {
 	// callback function
 	typedef void (*onPduReceiveCallback)(void);
 }
 
-typedef long long int64_t;
-//typedef unsigned long unsigned long uint64_t;
+//typedef long long int64_t;
+typedef unsigned long long uint64_t;
 //typedef long int32_t;
 //typedef unsigned long uint32_t;
 //typedef unsigned char uint8_t;
 //typedef short int16_t;
 //typedef unsigned short uint16_t;
+
+
+typedef union uint64_u {
+	uint64_t uint64;
+	byte data[8];
+};
+
+typedef union int32_u {
+	int32_t int32;
+	byte data[4];
+};
+
+typedef union uint32_u {
+	uint32_t uint32;
+	byte data[4];
+};
+
+typedef union int16_u {
+	int16_t int16;
+	byte data[2];
+};
 
 typedef enum ASN_BER_BASE_TYPES {
 	//   ASN/BER base types
@@ -82,10 +103,10 @@ typedef enum SNMP_ERR_CODES {
 	SNMP_ERR_NO_SUCH_NAME 			= 2,
 	SNMP_ERR_BAD_VALUE 	  		= 3,
 	SNMP_ERR_READ_ONLY 	  		= 4,
-	SNMP_ERR_GEN_ERROR 	  		= 5
-/*
+	SNMP_ERR_GEN_ERROR 	  		= 5,
+
 	SNMP_ERR_NO_ACCESS	  		= 6,
-	SNMP_ERR_WRONG_TYPE   		SNMP_API_STAT_NAME_TOO_BIG,	= 7,
+	SNMP_ERR_WRONG_TYPE   			= 7,
 	SNMP_ERR_WRONG_LENGTH 			= 8,
 	SNMP_ERR_WRONG_ENCODING			= 9,
 	SNMP_ERR_WRONG_VALUE			= 10,
@@ -97,7 +118,6 @@ typedef enum SNMP_ERR_CODES {
 	SNMP_ERR_AUTHORIZATION_ERROR		= 16,
 	SNMP_ERR_NOT_WRITABLE			= 17,
 	SNMP_ERR_INCONSISTEN_NAME		= 18
-*/
 };
 
 typedef enum SNMP_API_STAT_CODES {
@@ -132,10 +152,9 @@ typedef enum SNMP_SYNTAXES {
 };
 
 typedef struct SNMP_OID {
-	//byte *oid;
-	byte oid[SNMP_MAX_OID_LEN];
+	byte data[SNMP_MAX_OID_LEN];
 	size_t size;
-	//char *buffer;
+	//
 	void toString(char *buffer) {
 		buffer[0] = '1';
 		buffer[1] = '.';
@@ -147,9 +166,9 @@ typedef struct SNMP_OID {
 		short mibVal;
 		//
 		for ( byte i = 1; i < size; i++ ) {
-			mibVal = (short)oid[i];
+			mibVal = (short)data[i];
 			if ( mibVal > 128 ) {
-				mibVal = (mibVal/128)*128 + (short)oid[i + 1];
+				mibVal = (mibVal/128)*128 + (short)data[i + 1];
 				i++;
 			}
 			//
@@ -161,63 +180,166 @@ typedef struct SNMP_OID {
 		//free(buff);
 		SNMP_FREE(buff);
 	};
-	/*
-	char *toString() {
-		// don't realocate if its already sized
-		if ( sizeof(buffer) == 0 ) {
-			buffer = (char *)malloc(sizeof(char)*SNMP_MAX_OID_LEN);
-		}
-		buffer[0] = '1';
-		buffer[1] = '.';
-		buffer[2]SNMP response packet = '3';
-		buffer[3] = '\0';
-		//
-		// tmp buffer - short (Int16)
-		char *buff = (char *)malloc(sizeof(char)*16);
-		short mibVal;
-		//
-		for ( byte i = 1; i < oidSize; i++ ) {
-			mibVal = (short)oid[i];
-			if ( mibVal > 128 ) {
-				mibVal = (mibVal/128)*128 + (short)oid[i + 1];
-				i++;
-			}
-			//
-			itoa(mibVal, buff, 10);
-			strcat(buffer, ".");
-			strcat(buffer, buff);
-		}
-		// free buff
-		free(buff);
-		//
-		return buffer;
-	}
-	*/
 };
 
 typedef struct SNMP_VALUE {
-	//byte *value;
-	byte value[SNMP_MAX_VALUE_LEN];
+	byte data[SNMP_MAX_VALUE_LEN];
 	size_t size;
 	SNMP_SYNTAXES syntax;
-	// union ???
-	void encode(SNMP_SYNTAXES syn, const char *val) {
-		byte i;
-		//free(value);
-		//SNMP_FREE(value);
-		memset(value, 0, SNMP_MAX_VALUE_LEN);
-		syntax = syn;
-		if ( syn == SNMP_SYNTAX_OCTETS ) {
-			size = strlen(val);
-			//value = (byte *)malloc(sizeof(byte)*size);
-			for ( i = 0; i < size; i++ ) {
-				value[i] = (byte)val[i];
+	//
+	byte i; // for encoding/decoding functions
+	//
+	// clear's buffer and sets size to 0
+	void clear(void) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		size = 0;
+	}
+	//
+	//
+	// ASN.1 decoding functions
+	//
+	// decode's a string to an octet string syntax
+	// decode object-identifier here??
+	SNMP_ERR_CODES decode(char *value, size_t max_size) {
+		if ( syntax == SNMP_SYNTAX_OCTETS ) {
+			if ( strlen(value) - 1 < max_size ) {
+				for ( i = 0; i < size; i++ ) {
+					value[i] = (char)data[i];
+				}
+				value[size] = '\0';
+				return SNMP_ERR_NO_ERROR;
+			} else {
+				clear();	
+				return SNMP_ERR_TOO_BIG;
 			}
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
 		}
 	}
-	void encode(SNMP_SYNTAXES syn, int *val) {
+	//
+	// decode's an int32 to int or int32 syntax
+	SNMP_ERR_CODES decode(int32_t *value) {
+		if ( syntax == SNMP_SYNTAX_INT || syntax == SNMP_SYNTAX_INT32 ) {
+			int32_u tmp;
+			tmp.data[3] = data[0];
+			tmp.data[2] = data[1];
+			tmp.data[1] = data[2];
+			tmp.data[0] = data[3];
+			*value = tmp.int32;
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
 	}
-	void encode(SNMP_SYNTAXES syn, bool *val) {
+	//
+	// decode's an uint32 to uint32, counter, time-ticks, gauge syntax
+	SNMP_ERR_CODES decode(uint32_t *value) {
+		if ( syntax == SNMP_SYNTAX_COUNTER || syntax == SNMP_SYNTAX_TIME_TICKS
+			|| syntax == SNMP_SYNTAX_GAUGE || syntax == SNMP_SYNTAX_UINT32 ) {
+			uint32_u tmp;
+			tmp.data[3] = data[0];
+			tmp.data[2] = data[1];
+			tmp.data[1] = data[2];
+			tmp.data[0] = data[3];
+			*value = tmp.uint32;
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
+	//
+	// ASN.1 encoding functions
+	//
+	// encode's a octet string to a string syntax
+	// encode object-identifier here??
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const char *value) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		if ( syn == SNMP_SYNTAX_OCTETS ) {
+			if ( strlen(value) - 1 < SNMP_MAX_VALUE_LEN ) {
+				syntax = syn;
+				size = strlen(value);
+				for ( i = 0; i < size; i++ ) {
+					data[i] = (byte)value[i];
+				}
+				return SNMP_ERR_NO_ERROR;
+			} else {
+				clear();	
+				return SNMP_ERR_TOO_BIG;
+			}
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
+	// encode's an int32 to int32 syntax
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const int32_t value) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		if ( syn == SNMP_SYNTAX_INT || syn == SNMP_SYNTAX_INT32 ) {
+			int32_u tmp;
+			size = 4;
+			syntax = syn;
+			tmp.int32 = value;
+			data[0] = tmp.data[3];
+			data[1] = tmp.data[2];
+			data[2] = tmp.data[1];
+			data[3] = tmp.data[0];
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
+	// encode's an uint32 to uint32, counter, time-ticks, gauge syntax
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const uint32_t value) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		if ( syn == SNMP_SYNTAX_COUNTER || syn == SNMP_SYNTAX_TIME_TICKS
+			|| syn == SNMP_SYNTAX_GAUGE || syn == SNMP_SYNTAX_UINT32 ) {
+			uint32_u tmp;
+			size = 4;
+			syntax = syn;
+			tmp.uint32 = value;
+			data[0] = tmp.data[3];
+			data[1] = tmp.data[2];
+			data[2] = tmp.data[1];
+			data[3] = tmp.data[0];
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
+	// encode's an uint64 to counter64 syntax
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const uint64_t value) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		if ( syn == SNMP_SYNTAX_COUNTER64 ) {
+			uint64_u tmp;
+			size = 8;
+			syntax = syn;
+			tmp.uint64 = value;
+			data[0] = tmp.data[7];
+			data[1] = tmp.data[6];
+			data[2] = tmp.data[5];
+			data[3] = tmp.data[4];
+			data[4] = tmp.data[3];
+			data[5] = tmp.data[2];
+			data[6] = tmp.data[1];
+			data[7] = tmp.data[0];
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const bool val) {
+		return SNMP_ERR_NO_ERROR;
 	}
 };
 
@@ -231,50 +353,33 @@ typedef struct SNMP_PDU {
 	SNMP_VALUE VALUE;
 };
 
-typedef struct SNMP_SESSION {
-	char *getCommName;
-	size_t getSize;
-	char *setCommName;
-	size_t setSize;
-	uint16_t port;
-};
-
-typedef union int32_u {
-	int32_t int32;
-	byte data[4];
-};
-
-typedef union int16_u {
-	int16_t int16;
-	byte data[2];
-};
-
-class Agentuino {
+class AgentuinoClass {
 public:
-	// Constructor(s)
-	Agentuino();
-
 	// Agent functions
-	SNMP_API_STAT_CODES initSession(SNMP_SESSION *session);
+	SNMP_API_STAT_CODES begin();
+	SNMP_API_STAT_CODES begin(char *getCommName, char *setCommName, uint16_t port);
 	void listen(void);
 	SNMP_API_STAT_CODES requestPdu(SNMP_PDU *pdu);
 	SNMP_API_STAT_CODES responsePdu(SNMP_PDU *pdu);
 	void onPduReceive(onPduReceiveCallback pduReceived);
 	void freePdu(SNMP_PDU *pdu);
-	void closeSession(SNMP_SESSION *session);
 
 	// Helper functions
 
 private:
-	byte *_packet;
+	byte _packet[SNMP_MAX_PACKET_LEN];
 	uint16_t _packetSize;
 	uint16_t _packetPos;
-	ASocket _socket;
 	SNMP_PDU_TYPES _dstType;
 	uint8_t _dstIp[4];
 	uint16_t _dstPort;
-	SNMP_SESSION *_session;
+	char *_getCommName;
+	size_t _getSize;
+	char *_setCommName;
+	size_t _setSize;
 	onPduReceiveCallback _callback;
 };
+
+extern AgentuinoClass Agentuino;
 
 #endif
