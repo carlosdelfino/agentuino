@@ -251,6 +251,17 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
+	// decode's a boolean to booean syntax
+	SNMP_ERR_CODES decode(bool *value) {
+		if ( syntax == SNMP_SYNTAX_BOOL ) {
+			*value = (data[0] != 0);
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
 	//
 	// ASN.1 encoding functions
 	//
@@ -315,6 +326,20 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
+	// encode's a boolean to boolean syntax
+	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const bool value) {
+		memset(data, 0, SNMP_MAX_VALUE_LEN);
+		if ( syn == SNMP_SYNTAX_BOOL ) {
+			size = 1;
+			syntax = syn;
+			data[0] = value ? 0xff : 0;
+			return SNMP_ERR_NO_ERROR;
+		} else {
+			clear();
+			return SNMP_ERR_WRONG_TYPE;
+		}
+	}
+	//
 	// encode's an uint64 to counter64 syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const uint64_t value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
@@ -336,10 +361,6 @@ typedef struct SNMP_VALUE {
 			clear();
 			return SNMP_ERR_WRONG_TYPE;
 		}
-	}
-	//
-	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const bool val) {
-		return SNMP_ERR_NO_ERROR;
 	}
 };
 
