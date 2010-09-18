@@ -48,7 +48,7 @@ SNMP_API_STAT_CODES AgentuinoClass::begin(char *getCommName, char *setCommName, 
 	_getSize = strlen(getCommName);
 	//
 	// validate get/set community name sizes
-	if ( _setSize > SNMP_MAX_NAME_LEN || _getSize > SNMP_MAX_NAME_LEN ) {
+	if ( _setSize > SNMP_MAX_NAME_LEN + 1 || _getSize > SNMP_MAX_NAME_LEN + 1 ) {
 		return SNMP_API_STAT_NAME_TOO_BIG;
 	}
 	//
@@ -376,7 +376,7 @@ SNMP_API_STAT_CODES AgentuinoClass::responsePdu(SNMP_PDU *pdu)
 	_packet[_packetPos++] = (byte)( pdu->OID.size + pdu->VALUE.size + 4 ); //2
 	//
 	// ObjectIdentifier
-	_packet[_packetPos++] = (byte)SNMP_SYNTAX_OBJECT_IDENTIFIER;	// type
+	_packet[_packetPos++] = (byte)SNMP_SYNTAX_OID;	// type
 	_packet[_packetPos++] = (byte)(pdu->OID.size);
 	for ( i = 0; i < pdu->OID.size; i++ ) {
 		_packet[_packetPos++] = pdu->OID.data[i];
