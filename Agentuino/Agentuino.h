@@ -185,6 +185,8 @@ typedef struct SNMP_OID {
 	};
 };
 
+// union for values?
+//
 typedef struct SNMP_VALUE {
 	byte data[SNMP_MAX_VALUE_LEN];
 	size_t size;
@@ -201,15 +203,41 @@ typedef struct SNMP_VALUE {
 	//
 	// ASN.1 decoding functions
 	//
-	// decode's a string from an octet string, opaque syntax
-	// decode object-identifier here??
+	// decode's an octet string, object-identifier, opaque syntax to string
 	SNMP_ERR_CODES decode(char *value, size_t max_size) {
-		if ( syntax == SNMP_SYNTAX_OCTETS || syntax == SNMP_SYNTAX_OPAQUE ) {
+		if ( syntax == SNMP_SYNTAX_OCTETS || syntax == SNMP_SYNTAX_OID
+			|| syntax == SNMP_SYNTAX_OPAQUE ) {
 			if ( strlen(value) - 1 < max_size ) {
-				for ( i = 0; i < size; i++ ) {
-					value[i] = (char)data[i];
+				if ( syntax == SNMP_SYNTAX_OID ) {
+					value[0] = '1';
+					value[1] = '.';
+					value[2] = '3';
+					value[3] = '\0';
+					//
+					// tmp buffer - short (Int16)
+					char *buff = (char *)malloc(sizeof(char)*16);
+					short mibVal;
+					//
+					for ( byte i = 1; i < size; i++ ) {
+						mibVal = (short)data[i];
+						if ( mibVal > 128 ) {
+							mibVal = (mibVal/128)*128 + (short)data[i + 1];
+							i++;
+						}
+						//
+						itoa(mibVal, buff, 10);
+						strcat(value, ".");
+						strcat(value, buff);
+					}
+					//
+					// free buff
+					SNMP_FREE(buff);
+				} else {
+					for ( i = 0; i < size; i++ ) {
+						value[i] = (char)data[i];
+					}
+					value[size] = '\0';
 				}
-				value[size] = '\0';
 				return SNMP_ERR_NO_ERROR;
 			} else {
 				clear();	
@@ -221,7 +249,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an int16 from int syntax
+	// decode's an int syntax to int16
 	SNMP_ERR_CODES decode(int16_t *value) {
 		if ( syntax == SNMP_SYNTAX_INT ) {
 			int16_u tmp;
@@ -235,9 +263,9 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an int32 from int or int32 syntax
+	// decode's an int32 syntax to int32
 	SNMP_ERR_CODES decode(int32_t *value) {
-		if ( syntax == SNMP_SYNTAX_INT || syntax == SNMP_SYNTAX_INT32 ) {
+		if ( syntax == SNMP_SYNTAX_INT32 ) {
 			int32_u tmp;
 			tmp.data[3] = data[0];
 			tmp.data[2] = data[1];
@@ -251,7 +279,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an uint32 from uint32, counter, time-ticks, gauge syntax
+	// decode's an uint32, counter, time-ticks, gauge syntax to uint32
 	SNMP_ERR_CODES decode(uint32_t *value) {
 		if ( syntax == SNMP_SYNTAX_COUNTER || syntax == SNMP_SYNTAX_TIME_TICKS
 			|| syntax == SNMP_SYNTAX_GAUGE || syntax == SNMP_SYNTAX_UINT32 ) {
@@ -268,7 +296,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an ip-address byte array from ip-address, NSAP-address syntax
+	// decode's an ip-address, NSAP-address syntax to an ip-address byte array 
 	SNMP_ERR_CODES decode(byte *value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syntax == SNMP_SYNTAX_IP_ADDRESS || syntax == SNMP_SYNTAX_NSAPADDR ) {
@@ -289,7 +317,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's a boolean from boolean syntax
+	// decode's a boolean syntax to boolean
 	SNMP_ERR_CODES decode(bool *value) {
 		if ( syntax == SNMP_SYNTAX_BOOL ) {
 			*value = (data[0] != 0);
@@ -325,7 +353,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's an int16 to int syntax
+	// encode's an int16 to int, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const int16_t value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syn == SNMP_SYNTAX_INT || syn == SNMP_SYNTAX_OPAQUE ) {
@@ -342,11 +370,10 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's an int32 to int32 syntax
+	// encode's an int32 to int32, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const int32_t value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
-		if ( syn == SNMP_SYNTAX_INT || syn == SNMP_SYNTAX_INT32 
-			|| syn == SNMP_SYNTAX_OPAQUE ) {
+		if ( syn == SNMP_SYNTAX_INT32 || syn == SNMP_SYNTAX_OPAQUE ) {
 			int32_u tmp;
 			size = 4;
 			syntax = syn;
@@ -362,7 +389,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's an uint32 to uint32, counter, time-ticks, gauge syntax
+	// encode's an uint32 to uint32, counter, time-ticks, gauge, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const uint32_t value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syn == SNMP_SYNTAX_COUNTER || syn == SNMP_SYNTAX_TIME_TICKS
@@ -383,7 +410,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's an ip-address byte array to ip-address, NSAP-address syntax
+	// encode's an ip-address byte array to ip-address, NSAP-address, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const byte *value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syn == SNMP_SYNTAX_IP_ADDRESS || syn == SNMP_SYNTAX_NSAPADDR 
@@ -406,7 +433,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's a boolean to boolean syntax
+	// encode's a boolean to boolean, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const bool value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syn == SNMP_SYNTAX_BOOL || syn == SNMP_SYNTAX_OPAQUE ) {
@@ -420,7 +447,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's an uint64 to counter64 syntax
+	// encode's an uint64 to counter64, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn, const uint64_t value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syn == SNMP_SYNTAX_COUNTER64 || syn == SNMP_SYNTAX_OPAQUE ) {
@@ -443,7 +470,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// encode's a null syntax
+	// encode's a null to null, opaque  syntax
 	SNMP_ERR_CODES encode(SNMP_SYNTAXES syn) {
 		clear();
 		if ( syn == SNMP_SYNTAX_NULL || syn == SNMP_SYNTAX_OPAQUE ) {
