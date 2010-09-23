@@ -267,7 +267,7 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an int syntax to int16
+	// decode's an int syntax to int16 ?? is this applicable
 	SNMP_ERR_CODES decode(int16_t *value) {
 		if ( syntax == SNMP_SYNTAX_INT ) {
 			int16_u tmp;
