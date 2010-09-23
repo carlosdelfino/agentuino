@@ -46,7 +46,7 @@ static char sysServices[] PROGMEM   = "1.3.6.1.2.1.1.7.0";  // read-only  (Integ
 // Arduino defined OIDs
 // .iso.org.dod.internet.private (.1.3.6.1.4)
 // .iso.org.dod.internet.private.enterprises (.1.3.6.1.4.1)
-// .iso.org.dod.internet.private.enterprises.arduino (.1.3.6.1.4.1.50000) **temp value assigned until PEN is provided
+// .iso.org.dod.internet.private.enterprises.arduino (.1.3.6.1.4.1.36582)
 //
 //
 // RFC1213 local values

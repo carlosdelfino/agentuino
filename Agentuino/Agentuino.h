@@ -67,6 +67,11 @@ typedef union int16_u {
 	byte data[2];
 };
 
+//typedef union uint16_u {
+//	uint16_t uint16;
+//	byte data[2];
+//};
+
 typedef enum ASN_BER_BASE_TYPES {
 	//   ASN/BER base types
 	ASN_BER_BASE_UNIVERSAL 	 = 0x0,
@@ -155,8 +160,11 @@ typedef enum SNMP_SYNTAXES {
 };
 
 typedef struct SNMP_OID {
-	byte data[SNMP_MAX_OID_LEN];
+	byte data[SNMP_MAX_OID_LEN];  // ushort array insted??
 	size_t size;
+	//
+	void fromString(const char *buffer) {
+	}
 	//
 	void toString(char *buffer) {
 		buffer[0] = '1';
@@ -165,23 +173,28 @@ typedef struct SNMP_OID {
 		buffer[3] = '\0';
 		//
 		// tmp buffer - short (Int16)
-		char *buff = (char *)malloc(sizeof(char)*16);
-		short mibVal;
+		//char *buff = (char *)malloc(sizeof(char)*16);  // I ya ya keeps hanging the MCU
+		char buff[16];
+		byte hsize = size - 1;
+		byte hpos = 1;
+		uint16_t subid;
 		//
-		for ( byte i = 1; i < size; i++ ) {
-			mibVal = (short)data[i];
-			if ( mibVal > 128 ) {
-				mibVal = (mibVal/128)*128 + (short)data[i + 1];
-				i++;
-			}
-			//
-			itoa(mibVal, buff, 10);
+		while ( hsize > 0 ) {
+			subid = 0;
+			uint16_t b = 0;
+			do {
+				uint16_t next = data[hpos++];
+				b = next & 0xFF;
+				subid = (subid << 7) + (b & ~0x80);
+				hsize--;
+			} while ( (hsize > 0) && ((b & 0x80) != 0) );
+			utoa(subid, buff, 10);
 			strcat(buffer, ".");
 			strcat(buffer, buff);
 		}
+		//
 		// free buff
-		//free(buff);
-		SNMP_FREE(buff);
+		//SNMP_FREE(buff);
 	};
 };
 
@@ -214,24 +227,29 @@ typedef struct SNMP_VALUE {
 					value[2] = '3';
 					value[3] = '\0';
 					//
-					// tmp buffer - short (Int16)
-					char *buff = (char *)malloc(sizeof(char)*16);
-					short mibVal;
+					// tmp buffer - ushort (UInt16)
+					//char *buff = (char *)malloc(sizeof(char)*16); // I ya ya..keep hanging the MCU
+					char buff[16];
+					byte hsize = size - 1;
+					byte hpos = 1;
+					uint16_t subid;
 					//
-					for ( byte i = 1; i < size; i++ ) {
-						mibVal = (short)data[i];
-						if ( mibVal > 128 ) {
-							mibVal = (mibVal/128)*128 + (short)data[i + 1];
-							i++;
-						}
-						//
-						itoa(mibVal, buff, 10);
+					while ( hsize > 0 ) {
+						subid = 0;
+						uint16_t b = 0;
+						do {
+							uint16_t next = data[hpos++];
+							b = next & 0xFF;
+							subid = (subid << 7) + (b & ~0x80);
+							hsize--;
+						} while ( (hsize > 0) && ((b & 0x80) != 0) );
+						utoa(subid, buff, 10);
 						strcat(value, ".");
 						strcat(value, buff);
 					}
 					//
 					// free buff
-					SNMP_FREE(buff);
+					//SNMP_FREE(buff);
 				} else {
 					for ( i = 0; i < size; i++ ) {
 						value[i] = (char)data[i];
