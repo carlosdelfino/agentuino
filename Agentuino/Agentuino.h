@@ -132,7 +132,8 @@ typedef enum SNMP_API_STAT_CODES {
 	SNMP_API_STAT_OID_TOO_BIG = 3,
 	SNMP_API_STAT_VALUE_TOO_BIG = 4,
 	SNMP_API_STAT_PACKET_INVALID = 5,
-	SNMP_API_STAT_PACKET_TOO_BIG = 6
+	SNMP_API_STAT_PACKET_TOO_BIG = 6,
+	SNMP_API_STAT_NO_SUCH_NAME = 7,
 };
 
 //
@@ -172,8 +173,6 @@ typedef struct SNMP_OID {
 		buffer[2] = '3';
 		buffer[3] = '\0';
 		//
-		// tmp buffer - short (Int16)
-		//char *buff = (char *)malloc(sizeof(char)*16);  // I ya ya keeps hanging the MCU
 		char buff[16];
 		byte hsize = size - 1;
 		byte hpos = 1;
@@ -192,9 +191,6 @@ typedef struct SNMP_OID {
 			strcat(buffer, ".");
 			strcat(buffer, buff);
 		}
-		//
-		// free buff
-		//SNMP_FREE(buff);
 	};
 };
 
@@ -227,8 +223,6 @@ typedef struct SNMP_VALUE {
 					value[2] = '3';
 					value[3] = '\0';
 					//
-					// tmp buffer - ushort (UInt16)
-					//char *buff = (char *)malloc(sizeof(char)*16); // I ya ya..keep hanging the MCU
 					char buff[16];
 					byte hsize = size - 1;
 					byte hpos = 1;
@@ -247,9 +241,6 @@ typedef struct SNMP_VALUE {
 						strcat(value, ".");
 						strcat(value, buff);
 					}
-					//
-					// free buff
-					//SNMP_FREE(buff);
 				} else {
 					for ( i = 0; i < size; i++ ) {
 						value[i] = (char)data[i];
@@ -267,13 +258,15 @@ typedef struct SNMP_VALUE {
 		}
 	}
 	//
-	// decode's an int syntax to int16 ?? is this applicable
+	// decode's an int syntax to int16
 	SNMP_ERR_CODES decode(int16_t *value) {
 		if ( syntax == SNMP_SYNTAX_INT ) {
-			int16_u tmp;
-			tmp.data[1] = data[0];
-			tmp.data[0] = data[1];
-			*value = tmp.int16;
+			uint8_t *p = (uint8_t*)value, i;
+			memset(value, 0, sizeof(*value));
+			for(i = 0;i < size;i++)
+			{
+				*p++ = data[size - 1 - i];
+			}
 			return SNMP_ERR_NO_ERROR;
 		} else {
 			clear();
@@ -284,12 +277,12 @@ typedef struct SNMP_VALUE {
 	// decode's an int32 syntax to int32
 	SNMP_ERR_CODES decode(int32_t *value) {
 		if ( syntax == SNMP_SYNTAX_INT32 ) {
-			int32_u tmp;
-			tmp.data[3] = data[0];
-			tmp.data[2] = data[1];
-			tmp.data[1] = data[2];
-			tmp.data[0] = data[3];
-			*value = tmp.int32;
+			uint8_t *p = (uint8_t*)value, i;
+			memset(value, 0, sizeof(*value));
+			for(i = 0;i < size;i++)
+			{
+				*p++ = data[size - 1 - i];
+			}
 			return SNMP_ERR_NO_ERROR;
 		} else {
 			clear();
@@ -301,12 +294,12 @@ typedef struct SNMP_VALUE {
 	SNMP_ERR_CODES decode(uint32_t *value) {
 		if ( syntax == SNMP_SYNTAX_COUNTER || syntax == SNMP_SYNTAX_TIME_TICKS
 			|| syntax == SNMP_SYNTAX_GAUGE || syntax == SNMP_SYNTAX_UINT32 ) {
-			uint32_u tmp;
-			tmp.data[3] = data[0];
-			tmp.data[2] = data[1];
-			tmp.data[1] = data[2];
-			tmp.data[0] = data[3];
-			*value = tmp.uint32;
+			uint8_t *p = (uint8_t*)value, i;
+			memset(value, 0, sizeof(*value));
+			for(i = 0;i < size;i++)
+			{
+				*p++ = data[size - 1 - i];
+			}
 			return SNMP_ERR_NO_ERROR;
 		} else {
 			clear();
@@ -318,17 +311,13 @@ typedef struct SNMP_VALUE {
 	SNMP_ERR_CODES decode(byte *value) {
 		memset(data, 0, SNMP_MAX_VALUE_LEN);
 		if ( syntax == SNMP_SYNTAX_IP_ADDRESS || syntax == SNMP_SYNTAX_NSAPADDR ) {
-			if ( sizeof(value) > 4 ) {
-				clear();
-				return SNMP_ERR_TOO_BIG;
-			} else {
-				size = 4;
-				data[0] = value[3];
-				data[1] = value[2];
-				data[2] = value[1];
-				data[3] = value[0];
-				return SNMP_ERR_NO_ERROR;
+			uint8_t *p = (uint8_t*)value, i;
+			memset(value, 0, 4);
+			for(i = 0;i < size;i++)
+			{
+				*p++ = data[size - 1 - i];
 			}
+			return SNMP_ERR_NO_ERROR;
 		} else {
 			clear();
 			return SNMP_ERR_WRONG_TYPE;
