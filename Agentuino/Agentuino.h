@@ -30,7 +30,7 @@
 #define SNMP_FREE(s)   do { if (s) { free((void *)s); s=NULL; } } while(0)
 //Frees a pointer only if it is !NULL and sets its value to NULL. 
 
-#include "WProgram.h"
+#include "Arduino.h"
 #include "Udp.h"
 
 extern "C" {

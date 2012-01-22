@@ -23,8 +23,9 @@
 //
 
 #include "Agentuino.h"
-#include "Udp.h"
+#include "EthernetUdp.h"
 
+EthernetUDP Udp;
 SNMP_API_STAT_CODES AgentuinoClass::begin()
 {
 	// set community names
@@ -61,7 +62,7 @@ SNMP_API_STAT_CODES AgentuinoClass::begin(char *getCommName, char *setCommName, 
 	//
 	// init UDP socket
 	Udp.begin(port);
-	//
+
 	return SNMP_API_STAT_SUCCESS;
 }
 
@@ -109,7 +110,9 @@ SNMP_API_STAT_CODES AgentuinoClass::requestPdu(SNMP_PDU *pdu)
 	}
 	//
 	// get UDP packet
-	Udp.readPacket(_packet, _packetSize, _dstIp, &_dstPort);
+	Udp.parsePacket();
+	Udp.read(_packet, _packetSize);
+// 	Udp.readPacket(_packet, _packetSize, _dstIp, &_dstPort);
 	//
 	// packet check 1
 	if ( _packet[0] != 0x30 ) {
@@ -347,7 +350,10 @@ SNMP_API_STAT_CODES AgentuinoClass::responsePdu(SNMP_PDU *pdu)
 		_packet[_packetPos++] = pdu->VALUE.data[i];
 	}
 	//
-	Udp.sendPacket(_packet, _packetSize, _dstIp, _dstPort);
+	Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+	Udp.write(_packet, _packetSize);
+	Udp.endPacket();
+//	Udp.write(_packet, _packetSize, _dstIp, _dstPort);
 	//
 	return SNMP_API_STAT_SUCCESS;
 }
