@@ -71,6 +71,7 @@ void AgentuinoClass::listen(void)
 	// if bytes are available in receive buffer
 	// and pointer to a function (delegate function)
 	// isn't null, trigger the function
+	Udp.parsePacket();
 	if ( Udp.available() && _callback != NULL ) (*_callback)();
 }
 
@@ -96,7 +97,7 @@ SNMP_API_STAT_CODES AgentuinoClass::requestPdu(SNMP_PDU *pdu)
 	byte i;
 	//
 	// set packet packet size (skip UDP header)
-	_packetSize = Udp.available()-8;
+	_packetSize = Udp.available();
 	//
 	// reset packet array
 	memset(_packet, 0, SNMP_MAX_PACKET_LEN);
@@ -110,7 +111,7 @@ SNMP_API_STAT_CODES AgentuinoClass::requestPdu(SNMP_PDU *pdu)
 	}
 	//
 	// get UDP packet
-	Udp.parsePacket();
+	//Udp.parsePacket();
 	Udp.read(_packet, _packetSize);
 // 	Udp.readPacket(_packet, _packetSize, _dstIp, &_dstPort);
 	//
