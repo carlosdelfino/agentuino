@@ -315,7 +315,7 @@ typedef struct SNMP_VALUE {
 			memset(value, 0, 4);
 			for(i = 0;i < size;i++)
 			{
-				*p++ = data[size - 1 - i];
+				*p++ = data[size - 4 - i];
 			}
 			return SNMP_ERR_NO_ERROR;
 		} else {
